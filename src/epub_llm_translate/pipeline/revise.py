@@ -264,7 +264,7 @@ def _revision_batch_prompt(
         }
         for row in batch
     ]
-    response_shape = [{"block_id": row["block_id"], "revised_text": "исправленный русский текст"} for row in batch]
+    response_shape = {"translations": [{"block_id": row["block_id"], "revised_text": "исправленный русский текст"} for row in batch]}
     return "\n".join(
         [
             "/no_think",
@@ -272,7 +272,7 @@ def _revision_batch_prompt(
             "Improve Russian style, fluency, consistency, and terminology while preserving meaning.",
             "Do not delete details. Do not add new events. Preserve approved names and terms.",
             "Use the same-chapter Russian reference context to match established wording, tone, names, and terminology.",
-            "Return strict JSON only. No markdown, no comments, no explanations.",
+            "Return strict JSON object only. No markdown, no comments, no explanations.",
             "Return exactly one object per input block_id, in the same order.",
             f"Approved glossary:\n{glossary}",
             f"Reference style guide:\n{style_guide}",

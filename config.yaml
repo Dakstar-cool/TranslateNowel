@@ -33,6 +33,31 @@ models:
     top_p: 0.9
     max_output_tokens: 16384
     disable_thinking: true
+    extra_body:
+      response_format:
+        type: "json_schema"
+        json_schema:
+          name: "revision_batch"
+          strict: true
+          schema:
+            type: "object"
+            additionalProperties: false
+            properties:
+              translations:
+                type: "array"
+                items:
+                  type: "object"
+                  additionalProperties: false
+                  properties:
+                    block_id:
+                      type: "string"
+                    revised_text:
+                      type: "string"
+                  required:
+                    - "block_id"
+                    - "revised_text"
+            required:
+              - "translations"
   draft_translate:
     backend: "openai_compatible"
     endpoint: "http://127.0.0.1:1234/v1/chat/completions"
