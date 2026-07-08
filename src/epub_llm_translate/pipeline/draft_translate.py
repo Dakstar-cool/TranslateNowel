@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 
 from epub_llm_translate.backends import BackendUnavailableError, ChatMessage, create_backend
@@ -21,6 +22,9 @@ META_OUTPUT_MARKERS = (
 )
 
 
+ProgressCallback = Callable[[dict[str, object]], None]
+
+
 def draft_translate(
     config: AppConfig,
     repo: Repository,
@@ -28,18 +32,42 @@ def draft_translate(
     glossary: list[dict[str, str]],
     overwrite_model_drafts: bool = False,
     concurrency: int | None = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> dict[str, int]:
     max_workers = max(1, concurrency or config.pipeline.max_concurrent_requests)
     translated = 0
     failed = 0
     skipped = 0
     submitted = 0
+    block_rows = repo.list_blocks(chapter_ids)
+    total = len(block_rows)
+    progress_step = max(1, total // 1000)
+    last_progress_processed = -1
+
+    def publish_progress(status: str, force: bool = False) -> None:
+        nonlocal last_progress_processed
+        processed = translated + failed + skipped
+        if (
+            not force
+            and status == "running"
+            and processed < total
+            and processed - last_progress_processed < progress_step
+        ):
+            return
+        payload = _progress_payload(total, translated, failed, skipped, submitted, max_workers, status)
+        repo.save_pipeline_progress("draft_translate", status, payload)
+        if progress_callback is not None:
+            progress_callback(payload)
+        last_progress_processed = processed
+
+    publish_progress("starting", force=True)
 
     if max_workers == 1:
         backend = create_backend(config.models.draft_translate)
-        for row in repo.list_blocks(chapter_ids):
+        for row in block_rows:
             if _should_skip_row(row, overwrite_model_drafts):
                 skipped += 1
+                publish_progress("running")
                 continue
             relevant_terms = _relevant_terms(row["source_text"], glossary)
             prompt = _draft_prompt(config, repo, row, relevant_terms)
@@ -51,18 +79,21 @@ def draft_translate(
                 else:
                     skipped += 1
             except BackendUnavailableError as exc:
+                publish_progress("aborted", force=True)
                 _abort_backend_unavailable(repo, exc, translated, failed, skipped, max_workers, submitted)
             except Exception as exc:
                 _record_model_error(repo, row, exc)
                 failed += 1
+            publish_progress("running")
         repo.log_event(
             "draft_translate",
             f"Draft translation finished: {translated} translated, {failed} failed, {skipped} skipped",
             {"concurrency": max_workers},
         )
+        publish_progress("done", force=True)
         return {"translated": translated, "failed": failed, "skipped": skipped, "concurrency": max_workers}
 
-    rows = iter(repo.list_blocks(chapter_ids))
+    rows = iter(block_rows)
     pending: dict[Future[str], object] = {}
     exhausted = False
     fatal_error: BackendUnavailableError | None = None
@@ -75,6 +106,7 @@ def draft_translate(
                 for row in rows:
                     if _should_skip_row(row, overwrite_model_drafts):
                         skipped += 1
+                        publish_progress("running")
                         continue
                     next_row = row
                     break
@@ -108,10 +140,12 @@ def draft_translate(
                 except Exception as exc:
                     _record_model_error(repo, row, exc)
                     failed += 1
+                publish_progress("running")
     finally:
         executor.shutdown(wait=fatal_error is None, cancel_futures=fatal_error is not None)
 
     if fatal_error is not None:
+        publish_progress("aborted", force=True)
         _abort_backend_unavailable(repo, fatal_error, translated, failed, skipped, max_workers, submitted)
 
     repo.log_event(
@@ -119,7 +153,31 @@ def draft_translate(
         f"Draft translation finished: {translated} translated, {failed} failed, {skipped} skipped",
         {"concurrency": max_workers, "submitted": submitted},
     )
+    publish_progress("done", force=True)
     return {"translated": translated, "failed": failed, "skipped": skipped, "concurrency": max_workers}
+
+
+def _progress_payload(
+    total: int,
+    translated: int,
+    failed: int,
+    skipped: int,
+    submitted: int,
+    concurrency: int,
+    status: str,
+) -> dict[str, object]:
+    processed = translated + failed + skipped
+    return {
+        "status": status,
+        "total": total,
+        "processed": processed,
+        "translated": translated,
+        "failed": failed,
+        "skipped": skipped,
+        "submitted": submitted,
+        "pending": max(0, submitted - translated - failed - skipped),
+        "concurrency": concurrency,
+    }
 
 
 def _should_skip_row(row, overwrite_model_drafts: bool) -> bool:

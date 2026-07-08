@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import sys
+import time
 from typing import Annotated
 
 import typer
@@ -64,6 +66,63 @@ def _dry_run(command: str, config_path: Path, extra: dict | None = None) -> None
 def _fail(message: str, code: int = 1) -> None:
     typer.echo(f"Error: {message}", err=True)
     raise typer.Exit(code=code)
+
+
+class CliProgressReporter:
+    def __init__(self, enabled: bool = True):
+        self.enabled = enabled
+        self.started_at = time.monotonic()
+        self.last_render_at = 0.0
+        self.finished = False
+
+    def __call__(self, payload: dict[str, object]) -> None:
+        if not self.enabled:
+            return
+        now = time.monotonic()
+        status = str(payload.get("status") or "running")
+        if status not in {"done", "aborted"} and now - self.last_render_at < 1.0:
+            return
+        total = int(payload.get("total") or 0)
+        processed = int(payload.get("processed") or 0)
+        translated = int(payload.get("translated") or 0)
+        failed = int(payload.get("failed") or 0)
+        skipped = int(payload.get("skipped") or 0)
+        pending = int(payload.get("pending") or 0)
+        concurrency = int(payload.get("concurrency") or 1)
+        percent = (processed / total) if total else 0.0
+        width = 28
+        filled = min(width, int(width * percent))
+        bar = "#" * filled + "-" * (width - filled)
+        elapsed = max(0.0, now - self.started_at)
+        eta = "--:--"
+        if processed > 0 and total > processed:
+            rate = processed / elapsed if elapsed > 0 else 0.0
+            if rate > 0:
+                eta = _format_duration((total - processed) / rate)
+        line = (
+            f"\r[{bar}] {processed}/{total} {percent * 100:5.1f}% "
+            f"ok:{translated} fail:{failed} skip:{skipped} pending:{pending} "
+            f"c:{concurrency} eta:{eta}"
+        )
+        if status == "aborted":
+            line += " aborted"
+        elif status == "done":
+            line += " done"
+            self.finished = True
+        sys.stderr.write(line)
+        if status in {"done", "aborted"}:
+            sys.stderr.write("\n")
+        sys.stderr.flush()
+        self.last_render_at = now
+
+
+def _format_duration(seconds: float) -> str:
+    total = max(0, int(seconds))
+    hours, remainder = divmod(total, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours:
+        return f"{hours:d}:{minutes:02d}:{secs:02d}"
+    return f"{minutes:02d}:{secs:02d}"
 
 
 def _approved_glossary_or_exit(cfg) -> list[dict[str, str]]:
@@ -169,6 +228,7 @@ def draft_translate_cmd(
     chapters: Annotated[str | None, typer.Option("--chapters", help="Chapter range, e.g. 1-315 or 1,3,5-7.")] = None,
     concurrency: Annotated[int | None, typer.Option("--concurrency", min=1, max=16, help="Override concurrent model requests for this run.")] = None,
     overwrite_model_drafts: Annotated[bool, typer.Option("--overwrite-model-drafts", help="Retranslate existing machine draft blocks while preserving human edits.")] = False,
+    progress: Annotated[bool, typer.Option("--progress/--no-progress", help="Show a CLI progress bar with ETA on stderr.")] = True,
     dry_run: DryRunOption = False,
 ) -> None:
     cfg = load_config(config)
@@ -181,13 +241,24 @@ def draft_translate_cmd(
                 "chapters": chapter_ids[:5] + (["..."] if len(chapter_ids) > 5 else []),
                 "concurrency": concurrency or cfg.pipeline.max_concurrent_requests,
                 "overwrite_model_drafts": overwrite_model_drafts,
+                "progress": progress,
             },
         )
         return
     cfg, repo = _repo(config)
     glossary = _approved_glossary_or_exit(cfg)
     try:
-        _print(draft_translate_impl(cfg, repo, chapter_ids, glossary, overwrite_model_drafts=overwrite_model_drafts, concurrency=concurrency))
+        _print(
+            draft_translate_impl(
+                cfg,
+                repo,
+                chapter_ids,
+                glossary,
+                overwrite_model_drafts=overwrite_model_drafts,
+                concurrency=concurrency,
+                progress_callback=CliProgressReporter(progress),
+            )
+        )
     except RuntimeError as exc:
         _fail(str(exc))
 

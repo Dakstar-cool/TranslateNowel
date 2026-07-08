@@ -74,6 +74,26 @@ def test_repository_edit_precedence_and_locks(tmp_path: Path) -> None:
     assert not repo.save_model_translation("ch0001-b00000", "revised_translation", "Revised", "fake", "revision_done")
 
 
+def test_repository_pipeline_progress(tmp_path: Path) -> None:
+    conn = initialize_database(tmp_path / "work.sqlite")
+    repo = Repository(conn)
+    job_id = repo.save_pipeline_progress(
+        "draft_translate",
+        "running",
+        {"total": 10, "processed": 3, "status": "running"},
+    )
+    repo.save_pipeline_progress(
+        "draft_translate",
+        "done",
+        {"total": 10, "processed": 10, "status": "done"},
+    )
+    job = repo.latest_pipeline_job("draft_translate")
+    assert job is not None
+    assert job["job_id"] == job_id
+    assert job["status"] == "done"
+    assert '"processed": 10' in job["payload_json"]
+
+
 def test_glossary_validation(tmp_path: Path) -> None:
     path = tmp_path / "glossary.approved.yaml"
     path.write_text(

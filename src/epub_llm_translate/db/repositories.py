@@ -26,6 +26,53 @@ class Repository:
         )
         self.conn.commit()
 
+    def save_pipeline_progress(self, job_type: str, status: str, payload: dict[str, Any]) -> int:
+        stored_status = "running" if status in {"starting", "running"} else status
+        now = utc_now()
+        running = self.conn.execute(
+            """
+            SELECT job_id FROM pipeline_jobs
+            WHERE job_type = ? AND status = 'running'
+            ORDER BY job_id DESC LIMIT 1
+            """,
+            (job_type,),
+        ).fetchone()
+        if running is not None:
+            job_id = int(running["job_id"])
+            self.conn.execute(
+                """
+                UPDATE pipeline_jobs
+                SET status = ?, payload_json = ?, updated_at = ?
+                WHERE job_id = ?
+                """,
+                (stored_status, json.dumps(payload, ensure_ascii=False), now, job_id),
+            )
+        else:
+            cur = self.conn.execute(
+                """
+                INSERT INTO pipeline_jobs(job_type, status, payload_json, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (job_type, stored_status, json.dumps(payload, ensure_ascii=False), now, now),
+            )
+            job_id = int(cur.lastrowid)
+        self.conn.commit()
+        return job_id
+
+    def latest_pipeline_job(self, job_type: str | None = None) -> sqlite3.Row | None:
+        if job_type:
+            return self.conn.execute(
+                """
+                SELECT * FROM pipeline_jobs
+                WHERE job_type = ?
+                ORDER BY job_id DESC LIMIT 1
+                """,
+                (job_type,),
+            ).fetchone()
+        return self.conn.execute(
+            "SELECT * FROM pipeline_jobs ORDER BY job_id DESC LIMIT 1"
+        ).fetchone()
+
     def recent_events(self, limit: int = 100) -> list[sqlite3.Row]:
         return self.conn.execute(
             "SELECT * FROM pipeline_events ORDER BY event_id DESC LIMIT ?",
