@@ -1,0 +1,4 @@
+Revise the Russian draft into fluent literary Russian while preserving meaning.
+Do not add events, delete details, or change approved glossary terms.
+Return only revised Russian text.
+

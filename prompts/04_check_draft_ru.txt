@@ -1,0 +1,3 @@
+Check draft translation for omissions, glossary errors, remaining Korean text,
+broken dialogue, suspicious shortening, and assistant meta phrases.
+

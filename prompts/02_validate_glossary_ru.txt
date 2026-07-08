@@ -1,0 +1,3 @@
+Validate approved Korean-to-Russian glossary entries.
+Report duplicate, missing, conflicting, or non-Russian terms.
+

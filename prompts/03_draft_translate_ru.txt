@@ -1,0 +1,4 @@
+Translate Korean source to Russian.
+Preserve meaning, completeness, paragraph order, and approved glossary terms.
+Return only Russian translation.
+

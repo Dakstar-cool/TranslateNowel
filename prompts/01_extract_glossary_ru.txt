@@ -1,0 +1,3 @@
+Extract glossary candidates from the Korean source for Russian translation.
+Return structured YAML only.
+

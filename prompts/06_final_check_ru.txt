@@ -1,0 +1,3 @@
+Compare Korean source, Russian draft, revised text, and approved glossary.
+Detect semantic drift, missing text, remaining Korean, and unresolved issues.
+

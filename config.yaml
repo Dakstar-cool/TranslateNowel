@@ -1,0 +1,125 @@
+project:
+  input_epub: "workdir/Original.epub"
+  workdir: "workdir"
+  output_draft_epub: "workdir/book.draft.ru.epub"
+  output_final_epub: "workdir/book.final.ru.epub"
+
+chapters:
+  total: 315
+  reference_translated: [1, 60]
+  machine_translate: [1, 315]
+  validation_reference: [51, 60]
+
+reference:
+  enabled: true
+  mode: "aligned_chapters"
+  translation_dir: "workdir/reference"
+  use_as_final_for_reference_chapters: false
+  use_for_glossary: true
+  use_for_style_guide: true
+  use_for_benchmark: true
+  use_for_draft: false
+  use_for_revision: true
+  max_examples_per_block: 4
+  example_max_chars: 1200
+
+models:
+  glossary:
+    backend: "openai_compatible"
+    endpoint: "http://127.0.0.1:1234/v1/chat/completions"
+    model: "qwen3.5-9b-deepseek-v4-flash"
+    num_ctx: 16384
+    temperature: 0.1
+    top_p: 0.9
+    max_output_tokens: 16384
+    disable_thinking: true
+  draft_translate:
+    backend: "openai_compatible"
+    endpoint: "http://127.0.0.1:1234/v1/chat/completions"
+    model: "tencent/HY-MT1.5-7B-GGUF"
+    num_ctx: 16384
+    temperature: 0.7
+    top_p: 0.6
+    max_output_tokens: 16384
+    disable_thinking: false
+  revise:
+    backend: "openai_compatible"
+    endpoint: "http://127.0.0.1:1234/v1/chat/completions"
+    model: "qwen3.5-9b-deepseek-v4-flash"
+    num_ctx: 8192
+    temperature: 0.2
+    top_p: 0.9
+    max_output_tokens: 16384
+    disable_thinking: true
+  final_check:
+    backend: "openai_compatible"
+    endpoint: "http://127.0.0.1:1234/v1/chat/completions"
+    model: "qwen3.5-9b-deepseek-v4-flash"
+    num_ctx: 16384
+    temperature: 0.0
+    max_output_tokens: 16384
+    disable_thinking: true
+
+translation:
+  chunk_max_chars: 3500
+  previous_translated_paragraphs: 4
+  next_source_paragraphs: 2
+  preserve_html: true
+  keep_paragraph_count: true
+
+revision:
+  profile: "accurate"
+  chunk_max_chars: 3000
+  previous_revised_paragraphs: 3
+  next_draft_paragraphs: 1
+  use_korean_source: true
+  use_russian_draft: true
+  use_reference_examples: true
+  strict_glossary: true
+  max_retries: 2
+
+review:
+  context_before_paragraphs: 1
+  context_after_paragraphs: 1
+  editable_scope: "target_paragraph"
+  show_source_context: true
+  show_draft_context: true
+  show_revised_context: true
+  highlight_issue_terms: true
+  allow_context_edit_override: true
+
+review_flow:
+  mode: "assisted"
+  max_unreviewed_high_issues: 200
+  action_when_limit_reached: "pause_revision_only"
+
+quality:
+  create_review_windows: true
+  issue_context_mode: "paragraph"
+  store_issue_offsets: true
+  fail_on_remaining_hangul: true
+  fail_on_empty_blocks: true
+  fail_on_forbidden_phrases: true
+  warn_length_ratio_min: 0.45
+  warn_length_ratio_max: 1.85
+
+gui:
+  enabled: true
+  backend: "pyside6"
+  refresh_seconds: 5
+  default_queue: "needs_review"
+  allow_glossary_edit: true
+  allow_retry_actions: true
+  allow_context_edit_override: true
+
+pipeline:
+  skip_locked_blocks: true
+  never_overwrite_human_edits: true
+  stale_lock_minutes: 60
+  max_concurrent_requests: 2
+
+final_build:
+  default_mode: "uniform_machine"
+  supported_modes:
+    - "uniform_machine"
+    - "hybrid_reference_plus_machine"

@@ -1,0 +1,3 @@
+Extract a compact Russian literary style guide from short reference examples.
+Do not copy long passages.
+
