@@ -45,8 +45,8 @@ models:
   revise:
     backend: "openai_compatible"
     endpoint: "http://127.0.0.1:1234/v1/chat/completions"
-    model: "qwen3.5-9b-deepseek-v4-flash"
-    num_ctx: 8192
+    model: "qwen/qwen3.6-35b-a3b"
+    num_ctx: 16384
     temperature: 0.2
     top_p: 0.9
     max_output_tokens: 16384
@@ -54,7 +54,7 @@ models:
   final_check:
     backend: "openai_compatible"
     endpoint: "http://127.0.0.1:1234/v1/chat/completions"
-    model: "qwen3.5-9b-deepseek-v4-flash"
+    model: "qwen/qwen3.6-35b-a3b"
     num_ctx: 16384
     temperature: 0.0
     max_output_tokens: 16384
@@ -69,7 +69,8 @@ translation:
 
 revision:
   profile: "accurate"
-  chunk_max_chars: 3000
+  chunk_max_chars: 12000
+  batch_blocks: 24
   previous_revised_paragraphs: 3
   next_draft_paragraphs: 1
   use_korean_source: true

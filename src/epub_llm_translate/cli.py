@@ -25,6 +25,7 @@ from epub_llm_translate.pipeline.repair_issue import repair_issue as repair_issu
 from epub_llm_translate.pipeline.revise import revise as revise_impl
 from epub_llm_translate.pipeline.runner import run_pipeline as run_pipeline_impl
 from epub_llm_translate.reference.analyze_reference import analyze_reference as analyze_reference_impl
+from epub_llm_translate.reference.benchmark import benchmark_reference as benchmark_reference_impl
 from epub_llm_translate.reference.import_reference import import_reference_chapters
 from epub_llm_translate.utils import parse_chapter_range
 
@@ -209,17 +210,19 @@ def validate_glossary_cmd(config: ConfigOption) -> None:
 
 
 @app.command("benchmark-reference")
-def benchmark_reference_cmd(config: ConfigOption, dry_run: DryRunOption = False) -> None:
+def benchmark_reference_cmd(
+    config: ConfigOption,
+    chapters: Annotated[str | None, typer.Option("--chapters", help="Reference chapter range, e.g. 1-3.")] = None,
+    dry_run: DryRunOption = False,
+) -> None:
+    cfg = load_config(config)
+    chapter_ids = parse_chapter_range(chapters, cfg.chapters.validation_reference)
     if dry_run:
-        _dry_run("benchmark-reference", config, {"validation_reference": load_config(config).chapters.validation_reference})
+        _dry_run("benchmark-reference", config, {"chapters": chapter_ids})
         return
     cfg, repo = _repo(config)
-    rows = repo.list_reference_chapters()
-    report_csv = cfg.workdir / "benchmark_report.csv"
-    report_html = cfg.workdir / "benchmark_report.html"
-    report_csv.write_text("chapter_id,status\n" + "\n".join(f"{row['chapter_id']},reference_available" for row in rows), encoding="utf-8")
-    report_html.write_text("<html><body><h1>Benchmark Report</h1></body></html>", encoding="utf-8")
-    _print({"chapters": len(rows), "csv": str(report_csv), "html": str(report_html)})
+    glossary = _approved_glossary_or_exit(cfg)
+    _print(benchmark_reference_impl(cfg, repo, chapter_ids, glossary))
 
 
 @app.command("draft-translate")
@@ -264,13 +267,19 @@ def draft_translate_cmd(
 
 
 @app.command("check-draft")
-def check_draft_cmd(config: ConfigOption, dry_run: DryRunOption = False) -> None:
+def check_draft_cmd(
+    config: ConfigOption,
+    chapters: Annotated[str | None, typer.Option("--chapters", help="Chapter range to check.")] = None,
+    dry_run: DryRunOption = False,
+) -> None:
+    cfg = load_config(config)
+    chapter_ids = parse_chapter_range(chapters, cfg.chapters.machine_translate)
     if dry_run:
-        _dry_run("check-draft", config, {"outputs": ["draft_quality_report.csv", "draft_quality_report.html"]})
+        _dry_run("check-draft", config, {"chapters": chapter_ids, "outputs": ["draft_quality_report.csv", "draft_quality_report.html"]})
         return
     cfg, repo = _repo(config)
     glossary = _approved_glossary_or_exit(cfg)
-    _print(check_draft_impl(cfg, repo, glossary))
+    _print(check_draft_impl(cfg, repo, glossary, chapter_ids))
 
 
 @app.command("revise")
@@ -279,26 +288,55 @@ def revise_cmd(
     profile: Annotated[str, typer.Option("--profile")] = "accurate",
     use_reference: Annotated[bool, typer.Option("--use-reference/--no-use-reference")] = True,
     chapters: Annotated[str | None, typer.Option("--chapters")] = None,
+    batch_blocks: Annotated[int | None, typer.Option("--batch-blocks", min=1, max=32, help="Number of paragraphs to revise per model call.")] = None,
+    overwrite_revised: Annotated[bool, typer.Option("--overwrite-revised", help="Regenerate existing machine revisions while preserving human final edits.")] = False,
     dry_run: DryRunOption = False,
 ) -> None:
     cfg = load_config(config)
     chapter_ids = parse_chapter_range(chapters, cfg.chapters.machine_translate)
     if dry_run:
-        _dry_run("revise", config, {"profile": profile, "use_reference": use_reference, "chapters_count": len(chapter_ids)})
+        _dry_run(
+            "revise",
+            config,
+            {
+                "profile": profile,
+                "use_reference": use_reference,
+                "chapters_count": len(chapter_ids),
+                "batch_blocks": batch_blocks or cfg.revision.batch_blocks,
+                "overwrite_revised": overwrite_revised,
+            },
+        )
         return
     cfg, repo = _repo(config)
     glossary = _approved_glossary_or_exit(cfg)
-    _print(revise_impl(cfg, repo, chapter_ids, glossary, profile, use_reference))
+    _print(
+        revise_impl(
+            cfg,
+            repo,
+            chapter_ids,
+            glossary,
+            profile,
+            use_reference,
+            batch_blocks=batch_blocks,
+            overwrite_revised=overwrite_revised,
+        )
+    )
 
 
 @app.command("final-check")
-def final_check_cmd(config: ConfigOption, dry_run: DryRunOption = False) -> None:
+def final_check_cmd(
+    config: ConfigOption,
+    chapters: Annotated[str | None, typer.Option("--chapters", help="Chapter range to check.")] = None,
+    dry_run: DryRunOption = False,
+) -> None:
+    cfg = load_config(config)
+    chapter_ids = parse_chapter_range(chapters, cfg.chapters.machine_translate)
     if dry_run:
-        _dry_run("final-check", config, {"outputs": ["final_quality_report.csv", "final_quality_report.html"]})
+        _dry_run("final-check", config, {"chapters": chapter_ids, "outputs": ["final_quality_report.csv", "final_quality_report.html"]})
         return
     cfg, repo = _repo(config)
     glossary = _approved_glossary_or_exit(cfg)
-    _print(final_check_impl(cfg, repo, glossary))
+    _print(final_check_impl(cfg, repo, glossary, chapter_ids))
 
 
 @app.command("build-final")

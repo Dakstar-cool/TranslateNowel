@@ -68,6 +68,7 @@ class TranslationConfig(BaseModel):
 class RevisionConfig(BaseModel):
     profile: str = "accurate"
     chunk_max_chars: int = 3000
+    batch_blocks: int = Field(default=1, ge=1, le=32)
     previous_revised_paragraphs: int = 3
     next_draft_paragraphs: int = 1
     use_korean_source: bool = True

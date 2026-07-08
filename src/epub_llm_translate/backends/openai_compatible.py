@@ -45,7 +45,8 @@ class OpenAICompatibleBackend:
         if not choices:
             return ""
         message = choices[0].get("message") or {}
-        return _clean_content(message.get("content") or "").strip()
+        content = message.get("content") or message.get("reasoning_content") or message.get("reasoning") or ""
+        return _clean_content(content).strip()
 
 
 def _clean_content(content: str) -> str:

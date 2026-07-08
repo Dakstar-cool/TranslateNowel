@@ -403,6 +403,12 @@ class Repository:
     def list_reference_chapters(self) -> list[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM reference_chapters ORDER BY chapter_id").fetchall()
 
+    def get_reference_chapter(self, chapter_id: int) -> sqlite3.Row | None:
+        return self.conn.execute(
+            "SELECT * FROM reference_chapters WHERE chapter_id = ?",
+            (chapter_id,),
+        ).fetchone()
+
     def insert_reference_example(self, chapter_id: int, reference_excerpt: str, source_excerpt: str | None = None, tags: str | None = None) -> None:
         self.conn.execute(
             """

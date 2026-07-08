@@ -12,6 +12,7 @@ from epub_llm_translate.epub.reader import inspect_epub
 from epub_llm_translate.pipeline.build_final import build_final
 from epub_llm_translate.pipeline.check_draft import check_draft
 from epub_llm_translate.pipeline.draft_translate import draft_translate
+from epub_llm_translate.pipeline.revise import revise
 from epub_llm_translate.reference.glossary_from_reference import parse_reference_glossary_terms
 from epub_llm_translate.reference.import_reference import import_reference_chapters
 from epub_llm_translate.utils import text_hash
@@ -59,6 +60,9 @@ def test_inspect_draft_check_and_build_final(tmp_path: Path) -> None:
     assert draft_result["concurrency"] == 2
     qa_result = check_draft(config, repo, glossary)
     assert Path(qa_result["csv"]).exists()
+    revise_result = revise(config, repo, [1, 2], glossary, "accurate", False, batch_blocks=2)
+    assert revise_result["revised"] >= 1
+    assert revise_result["batches"] >= 1
     for row in repo.list_blocks():
         repo.save_model_translation(row["block_id"], "revised_translation", f"Перевод {row['block_index']}", "fake", "revision_done")
     repo.clear_issues()
